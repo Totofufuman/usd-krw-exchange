@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USD/KRW 실시간 환율</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0a0b0e;
+            --card: #12141a;
+            --border: #1e2130;
+            --text: #f0f0f3;
+            --dim: #6b7080;
+            --blue: #4f8ff7;
+            --green: #00d26a;
+            --red: #ff4757;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        .container { max-width: 800px; width: 100%; }
+
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--dim);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .header .pair {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        /* Rate display */
+        .rate-section {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .current-rate {
+            font-size: 54px;
+            font-weight: 700;
+            letter-spacing: -2px;
+            line-height: 1.1;
+            margin-bottom: 10px;
+            font-variant-numeric: tabular-nums;
+            transition: color 0.3s;
+        }
+
+        .current-rate.flash-up { color: var(--green); }
+        .current-rate.flash-down { color: var(--red); }
+
+        .rate-change {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 15px;
+            font-weight: 500;
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .rate-change.up { color: var(--green); background: rgba(0,210,106,0.1); }
+        .rate-change.down { color: var(--red); background: rgba(255,71,87,0.1); }
+        .rate-change.neutral { color: var(--dim); background: rgba(107,112,128,0.1); }
+
+        /* Interval buttons */
+        .intervals {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .intervals button {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--dim);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .intervals button:hover {
+            background: #1a1d26;
+            color: var(--text);
+        }
+
+        .intervals button.active {
+            background: var(--blue);
+            border-color: var(--blue);
+            color: #fff;
+        }
+
+        /* Chart card */
+        .chart-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 24px;
+            position: relative;
+        }
+
+        .chart-wrap {
+            height: 460px;
+            position: relative;
+        }
+
+        .chart-wrap iframe {
+            border: none !important;
+        }
+
+        .chart-loading {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--card);
+            z-index: 10;
+            transition: opacity 0.4s;
+        }
+
+        .chart-loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .spinner {
+            width: 24px; height: 24px;
+            border: 2px solid var(--border);
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .stat {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat .label { font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+        .stat .value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            color: var(--dim);
+            font-size: 12px;
+            line-height: 1.8;
+        }
+
+        .pulse {
+            display: inline-block;
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            margin-right: 6px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+        .loading-text {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--dim);
+            font-size: 15px;
+        }
+
+        .error-banner {
+            background: rgba(255,71,87,0.1);
+            border: 1px solid rgba(255,71,87,0.3);
+            color: var(--red);
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            text-align: center;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        @media (max-width: 480px) {
+            body { padding: 20px 12px; }
+            .current-rate { font-size: 38px; }
+            .stats { grid-template-columns: 1fr; }
+            .intervals button { padding: 6px 11px; font-size: 12px; }
+            .chart-wrap { height: 350px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>실시간 환율</h1>
+            <div class="pair">USD / KRW</div>
+        </div>
+
+        <div class="rate-section">
+            <div class="current-rate" id="currentRate">
+                <div class="loading-text"><div class="spinner"></div>연결 중...</div>
+            </div>
+            <div class="rate-change neutral" id="rateChange">--</div>
+        </div>
+
+        <div class="error-banner" id="errorBanner"></div>
+
+        <div class="intervals" id="intervals">
+            <button data-tv="1">1시간</button>
+            <button data-tv="5">4시간</button>
+            <button data-tv="15">6시간</button>
+            <button data-tv="30">12시간</button>
+            <button data-tv="60" class="active">1일</button>
+            <button data-tv="240">7일</button>
+            <button data-tv="D">1개월</button>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-wrap" id="tvChartWrap">
+                <div class="chart-loading" id="chartLoading">
+                    <div class="spinner"></div>
+                </div>
+                <div id="tvChart" style="width:100%;height:100%;"></div>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="label">기준환율</div>
+                <div class="value" id="statRef">--</div>
+            </div>
+            <div class="stat">
+                <div class="label">전일 대비</div>
+                <div class="value" id="statChange">--</div>
+            </div>
+            <div class="stat">
+                <div class="label">데이터 기준일</div>
+                <div class="value" id="statDate">--</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div id="updateTime"><span class="pulse"></span>실시간 시장 데이터</div>
+            <div>차트: TradingView 실시간 · 환율 정보: ECB 기준</div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        'use strict';
+
+        /* ── TradingView interval config ── */
+        const INTERVAL_CONFIG = {
+            '1':   { range: undefined },
+            '5':   { range: undefined },
+            '15':  { range: undefined },
+            '30':  { range: '1D' },
+            '60':  { range: '1D' },
+            '240': { range: '5D' },
+            'D':   { range: '1M' }
+        };
+
+        let currentInterval = '60';
+        let tvScriptLoaded = false;
+        let prevRate = null;
+
+        /* ── helpers ── */
+        const fmt = (v) =>
+            '\u20A9' + v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        const dateStr = (d) => d.toISOString().split('T')[0];
+
+        const showError = (msg) => {
+            const el = document.getElementById('errorBanner');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => { el.style.display = 'none'; }, 8000);
+        };
+
+        /* ── TradingView widget ── */
+        function createTVWidget(interval) {
+            const container = document.getElementById('tvChart');
+            container.innerHTML = '';
+
+            const loading = document.getElementById('chartLoading');
+            loading.classList.remove('hidden');
+
+            const config = {
+                autosize: true,
+                symbol: 'FX_IDC:USDKRW',
+                interval: interval,
+                timezone: 'Asia/Seoul',
+                theme: 'dark',
+                style: '3',
+                locale: 'kr',
+                enable_publishing: false,
+                allow_symbol_change: false,
+                hide_top_toolbar: true,
+                hide_side_toolbar: true,
+                hide_legend: false,
+                save_image: false,
+                container_id: 'tvChart',
+                withdateranges: false,
+                details: false,
+                calendar: false,
+                backgroundColor: 'rgba(18, 20, 26, 1)',
+                gridLineColor: 'rgba(255, 255, 255, 0.03)',
+                overrides: {
+                    'paneProperties.background': '#12141a',
+                    'paneProperties.backgroundType': 'solid',
+                    'paneProperties.vertGridProperties.color': 'rgba(255,255,255,0.03)',
+                    'paneProperties.horzGridProperties.color': 'rgba(255,255,255,0.03)',
+                    'mainSeriesProperties.areaStyle.linecolor': '#4f8ff7',
+                    'mainSeriesProperties.areaStyle.linewidth': 2,
+                    'mainSeriesProperties.areaStyle.color1': 'rgba(79,143,247,0.28)',
+                    'mainSeriesProperties.areaStyle.color2': 'rgba(79,143,247,0.02)',
+                    'mainSeriesProperties.areaStyle.transparency': 50,
+                    'scalesProperties.textColor': '#6b7080',
+                    'scalesProperties.lineColor': 'rgba(255,255,255,0.05)'
+                }
+            };
+
+            const rangeVal = INTERVAL_CONFIG[interval]?.range;
+            if (rangeVal) {
+                config.range = rangeVal;
+            }
+
+            try {
+                new TradingView.widget(config);
+                setTimeout(() => { loading.classList.add('hidden'); }, 1500);
+            } catch (err) {
+                loading.innerHTML = '<span style="color:#6b7080;">차트를 불러올 수 없습니다</span>';
+            }
+        }
+
+        function loadTVScript() {
+            return new Promise((resolve, reject) => {
+                if (typeof TradingView !== 'undefined') {
+                    tvScriptLoaded = true;
+                    resolve();
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.src = 'https://s3.tradingview.com/tv.js';
+                script.onload = () => {
+                    tvScriptLoaded = true;
+                    resolve();
+                };
+                script.onerror = () => {
+                    reject(new Error('TradingView script load failed'));
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        /* ── Interval buttons ── */
+        function setupButtons() {
+            document.getElementById('intervals').addEventListener('click', (e) => {
+                if (e.target.tagName !== 'BUTTON') return;
+
+                document.querySelectorAll('.intervals button').forEach((b) => b.classList.remove('active'));
+                e.target.classList.add('active');
+
+                const interval = e.target.dataset.tv;
+                currentInterval = interval;
+
+                if (tvScriptLoaded) {
+                    createTVWidget(interval);
+                }
+            });
+        }
+
+        /* ── API: fetch current rate for display ── */
+        async function fetchRate() {
+            try {
+                const res = await fetch('https://api.frankfurter.app/latest?from=USD&to=KRW');
+                if (!res.ok) throw new Error(res.status);
+                const d = await res.json();
+                return { rate: d.rates.KRW, date: d.date };
+            } catch {}
+
+            try {
+                const res = await fetch('https://open.er-api.com/v6/latest/USD');
+                if (!res.ok) throw new Error(res.status);
+                const d = await res.json();
+                return { rate: d.rates.KRW, date: dateStr(new Date()) };
+            } catch {}
+
+            return null;
+        }
+
+        async function fetchPrevDayRate() {
+            const end = new Date();
+            end.setDate(end.getDate() - 1);
+            const start = new Date();
+            start.setDate(start.getDate() - 7);
+
+            try {
+                const res = await fetch(
+                    `https://api.frankfurter.app/${dateStr(start)}..${dateStr(end)}?from=USD&to=KRW`
+                );
+                if (!res.ok) return null;
+                const d = await res.json();
+                const dates = Object.keys(d.rates).sort();
+                if (dates.length === 0) return null;
+                return d.rates[dates[dates.length - 1]].KRW;
+            } catch { return null; }
+        }
+
+        function updateRateDisplay(rate, prevDayRate, date) {
+            const rateEl = document.getElementById('currentRate');
+            rateEl.textContent = fmt(rate);
+
+            /* flash animation on rate change */
+            if (prevRate !== null && rate !== prevRate) {
+                const cls = rate > prevRate ? 'flash-up' : 'flash-down';
+                rateEl.classList.add(cls);
+                setTimeout(() => rateEl.classList.remove(cls), 600);
+            }
+            prevRate = rate;
+
+            /* change badge */
+            const changeEl = document.getElementById('rateChange');
+            if (prevDayRate !== null) {
+                const diff = rate - prevDayRate;
+                const pct = (diff / prevDayRate) * 100;
+                const arrow = diff > 0 ? '\u25B2' : diff < 0 ? '\u25BC' : '\u2013';
+                const cls = diff > 0 ? 'up' : diff < 0 ? 'down' : 'neutral';
+                changeEl.className = 'rate-change ' + cls;
+                changeEl.textContent = arrow + ' ' + Math.abs(diff).toFixed(2) + ' (' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%)';
+
+                document.getElementById('statChange').textContent =
+                    (diff >= 0 ? '+' : '') + diff.toFixed(2);
+                document.getElementById('statChange').style.color =
+                    diff > 0 ? 'var(--red)' : diff < 0 ? 'var(--green)' : 'var(--text)';
+            }
+
+            document.getElementById('statRef').textContent = fmt(rate);
+            document.getElementById('statDate').textContent = date || '--';
+
+            const now = new Date();
+            document.getElementById('updateTime').innerHTML =
+                '<span class="pulse"></span>실시간 시장 데이터 \u00B7 기준환율 ' +
+                now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) +
+                ' 갱신';
+        }
+
+        /* ── init ── */
+        async function init() {
+            setupButtons();
+
+            /* load TradingView + rate data in parallel */
+            const tvPromise = loadTVScript().catch(() => {
+                showError('TradingView 차트를 불러올 수 없습니다. 인터넷 연결을 확인하세요.');
+            });
+
+            const [rateData, prevDayRate] = await Promise.all([
+                fetchRate(),
+                fetchPrevDayRate()
+            ]);
+
+            if (rateData) {
+                updateRateDisplay(rateData.rate, prevDayRate, rateData.date);
+            } else {
+                document.getElementById('currentRate').textContent = '--';
+                showError('환율 데이터를 불러올 수 없습니다.');
+            }
+
+            /* init chart after TradingView loaded */
+            await tvPromise;
+            if (tvScriptLoaded) {
+                createTVWidget(currentInterval);
+            }
+
+            /* poll reference rate every 2 minutes */
+            setInterval(async () => {
+                const data = await fetchRate();
+                if (data) {
+                    updateRateDisplay(data.rate, prevDayRate, data.date);
+                }
+            }, 120000);
+        }
+
+        init();
+    })();
+    </script>
+</body>
+</html>
